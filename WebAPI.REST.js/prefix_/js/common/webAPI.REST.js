@@ -1,4 +1,4 @@
-﻿// 
+// 
 // superagent.js
 // https://visionmedia.github.io/superagent/
 // https://github.com/visionmedia/superagent
@@ -42,7 +42,7 @@ webAPI.REST = {
         return this._context().getClientUrl();
     },
     _webAPIPath: function () {
-        return this._clientUrl() + "/api/data/v8.0/";
+        return this._clientUrl() + "/api/data/v8.1/";
     },
     _defaultHeaders: function (extraHeaders) {
         var defaultHeaders = {
@@ -342,6 +342,28 @@ webAPI.REST.associateEntities = function (parentType, parentId, childType, child
 
     return deferred.promise;
 };
+
+webAPI.REST.getEntitySetName = function(logicalName){
+	
+	    var deferred = Q.defer();
+
+    var url = this._webAPIPath() + "EntityDefinitions?$select=EntitySetName&$filter=LogicalName eq " + "'" + logicalName + "'";
+
+    var headers = this._defaultHeaders();
+
+    superagent.get(url).set(headers).end(function (err, res) {
+        if (err) {
+            deferred.reject(err);
+        }
+        else {
+            deferred.resolve(res.body.value[0].EntitySetName);
+        }
+    });
+
+    return deferred.promise;
+	
+}
+
 
 webAPI.REST.diassociateEntities = function (parentType, parentId, childId, relationshipName) {
 
