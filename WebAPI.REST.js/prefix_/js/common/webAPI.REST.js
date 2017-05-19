@@ -1,4 +1,4 @@
-// 
+﻿// 
 // superagent.js
 // https://visionmedia.github.io/superagent/
 // https://github.com/visionmedia/superagent
@@ -318,6 +318,61 @@ webAPI.REST.executeFetchXml = function (type, fetchXml, extraHeaders) {
 
     return deferred.promise;
 };
+
+//Execute FetchXml recursively using paging cookie & paging to bypass 5k limit.
+webAPI.REST.executeFetchAll = function (entitySetName, fetchXml, opt_pageNumber, opt_allRecords) {
+
+    //All records maintains the data across recursive calls to this function. Default is empty array.    
+    var allRecords = opt_allRecords || [];
+
+    //pageNumber maintains the page number across recursive calls to this function. Default is 1.
+    var pageNumber = opt_pageNumber || 1;
+
+    //Use existing executeFetchXml method for querying, the fetch is escaped due to including paging cookie
+    return webAPI.REST.executeFetchXml(entitySetName, escape(fetchXml), null)
+        .then(function (data) {
+            //Unlike executeFetchXml, the output of executeFetchXML is an array of records
+            allRecords = allRecords.concat(data.body.value);
+
+            //Check if there are more records.
+            if (typeof data.body["@Microsoft.Dynamics.CRM.fetchxmlpagingcookie"] !== "undefined") {
+                //Increment the page number as we will be paging to the next page
+                pageNumber++;
+
+                var domParser = new DOMParser();
+
+                //Convert last fetch xml to DOM document
+                var fetchXmlDoc = domParser.parseFromString(fetchXml, "text/xml");
+                if (fetchXmlDoc) {
+                    //Get fetch element
+                    var fetchElement = fetchXmlDoc.getElementsByTagName("fetch")[0];
+                    if (fetchElement) {
+                        //Increment the page attribute 
+                        fetchElement.setAttribute("page", pageNumber);
+
+                        //Convert cookie to DOM document
+                        var pagingCookieDoc = domParser.parseFromString(data.body["@Microsoft.Dynamics.CRM.fetchxmlpagingcookie"], "text/xml");
+                        //Get paging cookie attribute
+                        var pagingCookieAttribute = pagingCookieDoc.getElementsByTagName("cookie")[0].getAttribute("pagingcookie");
+                        //The paging cookie attribute needs to be decoded twice and unescaped to get the raw XML.
+                        var pagingCookie = unescape(decodeURI(decodeURI(pagingCookieAttribute)));
+
+                        //Set the paging cookie in our fetch
+                        fetchElement.setAttribute("paging-cookie", pagingCookie);
+
+                        //Serialize fetch to be in the proper format to recursively call executeFetchAll
+                        fetchXml = serializeXML(fetchXmlDoc);
+                        return webAPI.REST.executeFetchAll(entitySetName, fetchXml, pageNumber, allRecords);
+                    }
+                }
+            }
+            else {
+                //No additional records, return results                
+                return allRecords;
+            }
+        })
+}
+
 
 webAPI.REST.associateEntities = function (parentType, parentId, childType, childId, relationshipName) {
 
